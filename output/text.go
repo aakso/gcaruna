@@ -1,13 +1,13 @@
 package output
 
-import(
-	"strings"
+import (
 	"fmt"
-	"text/tabwriter"
 	"os"
+	"strings"
+	"text/tabwriter"
 	"time"
 
-	"caruna"
+	"github.com/aakso/gcaruna"
 )
 
 func PrintTextMeteringPoints(mps []caruna.MeteringPoint) {

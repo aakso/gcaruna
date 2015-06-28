@@ -1,27 +1,27 @@
 package output
 
-import(
-	"strings"
+import (
 	"fmt"
-	"time"
-	"log"
 	"io/ioutil"
+	"log"
+	"strings"
+	"time"
 
-	"caruna"
-	influxdb "caruna/influxdb08"
+	"github.com/aakso/gcaruna"
+	influxdb "github.com/aakso/gcaruna/influxdb08"
 )
 
 type InfluxDBConfig struct {
-	Host string
-	Username string
-	Password string
-	Database string
+	Host        string
+	Username    string
+	Password    string
+	Database    string
 	Incremental bool
 }
 
-const(
+const (
 	SeriesName = "kwh.%s"
-	FieldName = "value"
+	FieldName  = "value"
 )
 
 type InfluxDBOutput struct {
@@ -37,11 +37,11 @@ func (self *InfluxDBOutput) SetLogger(logger *log.Logger) {
 
 func (self *InfluxDBOutput) WriteData(hms []caruna.HourlyEnergyMeasurement) error {
 	var err error
-	
+
 	self.logger.Println("Start WriteData")
 	// Timebounds for incremental runs
 	limitRanges := make(map[string][]time.Time)
-	
+
 	// Data in influxdb series
 	seriesToDb := make(map[string]*influxdb.Series)
 
@@ -49,7 +49,7 @@ func (self *InfluxDBOutput) WriteData(hms []caruna.HourlyEnergyMeasurement) erro
 		seriesName := getSeriesName(e.MeteringPointLocation)
 		if _, keyexists := seriesToDb[seriesName]; keyexists == false {
 			seriesToDb[seriesName] = &influxdb.Series{
-				Name: seriesName,
+				Name:    seriesName,
 				Columns: []string{"time", "value"},
 			}
 		}
@@ -73,7 +73,7 @@ func (self *InfluxDBOutput) WriteData(hms []caruna.HourlyEnergyMeasurement) erro
 				return err
 			}
 			seriesExists := len(res[0].Points) > 0
-			
+
 			if seriesExists {
 				var val int64
 				q = fmt.Sprintf("SELECT * FROM %s ORDER ASC LIMIT 1", seriesName)
@@ -87,7 +87,7 @@ func (self *InfluxDBOutput) WriteData(hms []caruna.HourlyEnergyMeasurement) erro
 				}
 				val = int64(res[0].Points[0][cid].(float64))
 				limitStart = time.Unix(val, 0)
-				
+
 				q = fmt.Sprintf("SELECT * FROM %s ORDER DESC LIMIT 1", seriesName)
 				res, err = self.Client.Query(q, influxdb.Second)
 				if err != nil {
@@ -105,12 +105,12 @@ func (self *InfluxDBOutput) WriteData(hms []caruna.HourlyEnergyMeasurement) erro
 				self.logger.Printf("Series %s: excluding range %s - %s", seriesName, limitStart.String(), limitStop.String())
 			}
 		} // query time ranges
-		
+
 		// Skip measurements that are in the limit range (incremental mode)
 		mts := e.Timestamp
-		if (self.Config.Incremental && 
+		if self.Config.Incremental &&
 			(mts.Equal(limitStart) || mts.After(limitStart)) &&
-			(mts.Equal(limitStop) || mts.Before(limitStop))) {
+			(mts.Equal(limitStop) || mts.Before(limitStop)) {
 
 			continue
 		}
@@ -129,7 +129,7 @@ func (self *InfluxDBOutput) WriteData(hms []caruna.HourlyEnergyMeasurement) erro
 		if err != nil {
 			return err
 		}
-		count += len(v.Points)	
+		count += len(v.Points)
 	}
 
 	self.logger.Printf("Wrote %d data points to DB\n", count)
@@ -139,7 +139,7 @@ func (self *InfluxDBOutput) WriteData(hms []caruna.HourlyEnergyMeasurement) erro
 func NewInfluxDBOutput(config *InfluxDBConfig) (*InfluxDBOutput, error) {
 	var err error
 	clientCfg := &influxdb.ClientConfig{
-		Host: config.Host,
+		Host:     config.Host,
 		Username: config.Username,
 		Password: config.Password,
 		Database: config.Database,

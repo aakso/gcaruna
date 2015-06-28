@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"caruna/parser"
+	"github.com/aakso/gcaruna/parser"
 )
 
 const (
@@ -67,7 +67,7 @@ type MeteringPoint struct {
 }
 
 type ClientOpts struct {
-	Logger       *log.Logger
+	Logger *log.Logger
 }
 
 type CarunaClient struct {
@@ -268,7 +268,7 @@ func (self *CarunaClient) GetHourlySeries(meteringPointStr string, timeStart, ti
 				Value: v.Values.EnergyConsumption.Value,
 			})
 		}
-		
+
 	} // Meteringpoint loop
 	return ret, nil
 }
@@ -343,7 +343,6 @@ func (self *CarunaClient) SetLogger(logger *log.Logger) {
 	self.Logger = logger
 	self.Logger.SetPrefix("[CarunaClient] ")
 }
-
 
 func NewCarunaClient(urlStr, username, password string, opts *ClientOpts) (*CarunaClient, error) {
 	client := &CarunaClient{}

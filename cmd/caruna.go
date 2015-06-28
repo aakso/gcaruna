@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 	"strings"
+	"time"
 
-	"caruna"
-	"caruna/output"
+	"github.com/aakso/gcaruna"
+	"github.com/aakso/gcaruna/output"
 )
 
 type (
@@ -43,21 +43,20 @@ type Config struct {
 	*flag.FlagSet
 }
 
-
 // Concept stolen from etcd
 func (cfg *Config) mergeEnv() error {
 	var err error
 	fs := cfg.FlagSet
 
 	setFlags := make(map[string]bool)
-	fs.Visit(func (f *flag.Flag) {
+	fs.Visit(func(f *flag.Flag) {
 		setFlags[f.Name] = true
 	})
-	fs.VisitAll(func (f *flag.Flag) {
+	fs.VisitAll(func(f *flag.Flag) {
 		if setFlags[f.Name] {
 			return
 		}
-		
+
 		key := EnvPrefix + strings.ToUpper(strings.Replace(f.Name, "-", "_", -1))
 		val := os.Getenv(key)
 		if val == "" {
@@ -128,7 +127,7 @@ func (cfg *Config) Parse(args []string) error {
 	return nil
 }
 
-var(
+var (
 	config *Config
 )
 
@@ -144,7 +143,7 @@ func init() {
 
 func NewConfig() *Config {
 	cfg := &Config{}
-	
+
 	cfg.FlagSet = flag.NewFlagSet("caruna", flag.ExitOnError)
 	fs := cfg.FlagSet
 	cfg.argmap = make(map[string]interface{})
@@ -176,9 +175,8 @@ func main() {
 	username := os.Getenv("CARUNA_USERNAME")
 	password := os.Getenv("CARUNA_PASSWORD")
 
-	
 	config = NewConfig()
-	
+
 	err := config.Parse(os.Args[1:])
 	if err != nil {
 		fatal(err)
