@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/aakso/gcaruna"
-	influxdb "github.com/aakso/gcaruna/influxdb08"
+	influxdb "github.com/influxdb/influxdb/client/v2"
 )
 
 type InfluxDBConfig struct {
-	Host        string
+	URL         string
 	Username    string
 	Password    string
 	Database    string
@@ -20,13 +20,14 @@ type InfluxDBConfig struct {
 }
 
 const (
-	SeriesName = "kwh.%s"
+	SeriesName = "gcaruna"
+	TagName = "meteringpoint"
 	FieldName  = "value"
 )
 
 type InfluxDBOutput struct {
 	logger *log.Logger
-	Client *influxdb.Client
+	Client influxdb.Client
 	Config *InfluxDBConfig
 }
 
@@ -36,26 +37,22 @@ func (self *InfluxDBOutput) SetLogger(logger *log.Logger) {
 }
 
 func (self *InfluxDBOutput) WriteData(hms []caruna.HourlyEnergyMeasurement) error {
-	var err error
-
 	self.logger.Println("Start WriteData")
 	// Timebounds for incremental runs
 	limitRanges := make(map[string][]time.Time)
 
-	// Data in influxdb series
-	seriesToDb := make(map[string]*influxdb.Series)
+	// Batch for points
+	bp, _ := influxdb.NewBatchPoints(influxdb.BatchPointsConfig{
+		Database: self.Config.Database,
+		Precision: "s",
+	})
 
 	for _, e := range hms {
-		seriesName := getSeriesName(e.MeteringPointLocation)
-		if _, keyexists := seriesToDb[seriesName]; keyexists == false {
-			seriesToDb[seriesName] = &influxdb.Series{
-				Name:    seriesName,
-				Columns: []string{"time", "value"},
-			}
-		}
-		limitRange, limitRangeFound := limitRanges[seriesName]
+		meteringPointName := getMeteringPointName(e.MeteringPointLocation)
+
+		limitRange, limitRangeFound := limitRanges[meteringPointName]
 		var limitStart, limitStop time.Time
-		if limitRangeFound {
+		if limitRangeFound && limitRange != nil {
 			limitStart = limitRange[0]
 			limitStop = limitRange[1]
 		} else {
@@ -66,43 +63,29 @@ func (self *InfluxDBOutput) WriteData(hms []caruna.HourlyEnergyMeasurement) erro
 
 		// Query for ranges if incremental run is requested
 		if self.Config.Incremental && !limitRangeFound {
-			// Check that the series exists
-			q := fmt.Sprintf("LIST SERIES /^%s$/", seriesName)
-			res, err := self.Client.Query(q)
+			q := fmt.Sprintf(`SELECT * FROM "%s" WHERE %s='%s' ORDER BY time ASC LIMIT 1`, SeriesName, TagName, meteringPointName)
+			res, err := self.query(q)
 			if err != nil {
 				return err
 			}
-			seriesExists := len(res[0].Points) > 0
+			if len(res[0].Series) > 0 {
+				val, _ := time.Parse(time.RFC3339, res[0].Series[0].Values[0][0].(string))
+				limitStart = val
 
-			if seriesExists {
-				var val int64
-				q = fmt.Sprintf("SELECT * FROM %s ORDER ASC LIMIT 1", seriesName)
-				res, err = self.Client.Query(q, influxdb.Second)
+				q = fmt.Sprintf(`SELECT * FROM "%s" WHERE %s='%s' ORDER BY time DESC LIMIT 1`, SeriesName, TagName, meteringPointName)
+				res, err = self.query(q)
 				if err != nil {
 					return err
 				}
-				cid, err := getInfluxDBSeriesColumnId(res[0], "time")
-				if err != nil {
-					return err
-				}
-				val = int64(res[0].Points[0][cid].(float64))
-				limitStart = time.Unix(val, 0)
-
-				q = fmt.Sprintf("SELECT * FROM %s ORDER DESC LIMIT 1", seriesName)
-				res, err = self.Client.Query(q, influxdb.Second)
-				if err != nil {
-					return err
-				}
-				cid, err = getInfluxDBSeriesColumnId(res[0], "time")
-				if err != nil {
-					return err
-				}
-				val = int64(res[0].Points[0][cid].(float64))
-				limitStop = time.Unix(val, 0)
+				val, _ = time.Parse(time.RFC3339, res[0].Series[0].Values[0][0].(string))
+				limitStop = val
 
 				// Cache ranges
-				limitRanges[seriesName] = []time.Time{limitStart, limitStop}
-				self.logger.Printf("Series %s: excluding range %s - %s", seriesName, limitStart.String(), limitStop.String())
+				limitRanges[meteringPointName] = []time.Time{limitStart, limitStop}
+				self.logger.Printf("Meteringpoint %s: excluding range %s - %s", meteringPointName, limitStart.String(), limitStop.String())
+			} else {
+				self.logger.Printf("No existing time range for meteringpoint: %s", meteringPointName)
+				limitRanges[meteringPointName] = nil
 			}
 		} // query time ranges
 
@@ -115,36 +98,56 @@ func (self *InfluxDBOutput) WriteData(hms []caruna.HourlyEnergyMeasurement) erro
 			continue
 		}
 
-		// Make influxdb data point array
-		points := []interface{}{
-			e.Timestamp.Unix(),
-			e.Value,
+		// Make influxdb point
+		tags := map[string]string{
+			"meteringpoint": meteringPointName,
 		}
-		seriesToDb[seriesName].Points = append(seriesToDb[seriesName].Points, points)
-	} // range hms
-
-	count := 0
-	for _, v := range seriesToDb {
-		err = self.Client.WriteSeriesWithTimePrecision([]*influxdb.Series{v}, influxdb.Second)
+		fields := map[string]interface{}{
+			FieldName: e.Value,
+		}
+		pt, err := influxdb.NewPoint(
+			SeriesName,
+			tags,
+			fields,
+			e.Timestamp,
+		)
 		if err != nil {
 			return err
 		}
-		count += len(v.Points)
+		bp.AddPoint(pt)
+	} // range hms
+
+
+	if err := self.Client.Write(bp); err != nil {
+		return err
 	}
 
-	self.logger.Printf("Wrote %d data points to DB\n", count)
+	self.logger.Printf("Wrote %d data points to DB\n", len(bp.Points()))
 	return nil
+}
+
+func (self *InfluxDBOutput) query(cmd string) (res []influxdb.Result, err error) {
+    q := influxdb.Query{
+        Command:  cmd,
+        Database: self.Config.Database,
+    }
+    if response, err := self.Client.Query(q); err == nil {
+        if response.Error() != nil {
+            return res, response.Error()
+        }
+        res = response.Results
+    }
+    return res, nil
 }
 
 func NewInfluxDBOutput(config *InfluxDBConfig) (*InfluxDBOutput, error) {
 	var err error
-	clientCfg := &influxdb.ClientConfig{
-		Host:     config.Host,
+	clientCfg := influxdb.HTTPConfig{
+		Addr:     config.URL,
 		Username: config.Username,
 		Password: config.Password,
-		Database: config.Database,
 	}
-	client, err := influxdb.NewClient(clientCfg)
+	client, err := influxdb.NewHTTPClient(clientCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -157,21 +160,8 @@ func NewInfluxDBOutput(config *InfluxDBConfig) (*InfluxDBOutput, error) {
 	return ret, nil
 }
 
-func getInfluxDBSeriesColumnId(series *influxdb.Series, column string) (int, error) {
-	idx := -1
-	for i, v := range series.Columns {
-		if v == column {
-			idx = i
-		}
-	}
-	if idx == -1 {
-		return -1, fmt.Errorf("Column %s not found", column)
-	}
-	return idx, nil
-}
-
-func getSeriesName(loc []string) string {
+func getMeteringPointName(loc []string) string {
 	ret := strings.Join(loc, "_")
 	ret = strings.Replace(ret, " ", "_", -1)
-	return fmt.Sprintf(SeriesName, ret)
+	return ret
 }

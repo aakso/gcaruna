@@ -130,7 +130,7 @@ func (cfg *Config) Parse(args []string) error {
 	cfg.CarunaUrl = *cfg.argmap["caruna_url"].(*string)
 	cfg.Location = *cfg.argmap["location"].(*string)
 	cfg.InfluxDB = &output.InfluxDBConfig{}
-	cfg.InfluxDB.Host = *cfg.argmap["influxdb_host"].(*string)
+	cfg.InfluxDB.URL = *cfg.argmap["influxdb_url"].(*string)
 	cfg.InfluxDB.Username = *cfg.argmap["influxdb_username"].(*string)
 	cfg.InfluxDB.Password = *cfg.argmap["influxdb_password"].(*string)
 	cfg.InfluxDB.Database = *cfg.argmap["influxdb_database"].(*string)
@@ -173,7 +173,7 @@ func NewConfig() *Config {
 	cfg.argmap["username"] = fs.String("username", "", "Caruna Username")
 	cfg.argmap["password"] = fs.String("password", "", "Caruna Password")
 	cfg.argmap["debug"] = fs.Bool("debug", false, "true/false")
-	cfg.argmap["influxdb_host"] = fs.String("influxdb_host", "", "InfluxDB host:port")
+	cfg.argmap["influxdb_url"] = fs.String("influxdb_url", "http://localhost:8086", "InfluxDB http url")
 	cfg.argmap["influxdb_username"] = fs.String("influxdb_username", "", "InfluxDB username")
 	cfg.argmap["influxdb_password"] = fs.String("influxdb_password", "", "InfluxDB password")
 	cfg.argmap["influxdb_database"] = fs.String("influxdb_database", "", "InfluxDB database name")
