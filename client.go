@@ -38,6 +38,7 @@ const (
 	CarunaApiSeriesQueryParamResolution      = "resolution"
 	CarunaApiSeriesQueryParamResolutionValue = "MONTHS_AS_HOURS"
 	CarunaApiSeriesQueryParamProductValue    = "EL_ENERGY_CONSUMPTION"
+	CarunaApiSeriesQueryParamCustomer    = "customerNumber"
 
 	// Caruna API uses ISO8601 timestamps but doesn't allow the Z sign
 	CarunaTimeLayout = "2006-01-02T15:04:05-0700"
@@ -236,6 +237,7 @@ func (self *CarunaClient) GetHourlySeries(meteringPointStr string, timeStart, ti
 		params.Set(CarunaApiSeriesQueryParamResolution, CarunaApiSeriesQueryParamResolutionValue)
 		params.Set(CarunaApiSeriesQueryParamTimeStart, timeStart.Format(CarunaTimeLayout))
 		params.Set(CarunaApiSeriesQueryParamTimeStop, timeStop.Format(CarunaTimeLayout))
+		params.Set(CarunaApiSeriesQueryParamCustomer, self.CustomerInfo.Username)
 
 		reqUrl.RawQuery = params.Encode()
 
@@ -333,7 +335,7 @@ func (self *CarunaClient) Authenticate(username, password string) error {
 
 	self.CustomerInfo, err = self.GetCustomerInfo()
 	if err != nil {
-		return fmt.Errorf("Could not get Customer Info. Wrong credentials?")
+		return fmt.Errorf("Could not get Customer Info. Wrong credentials? error: %v", err)
 	}
 
 	return nil
