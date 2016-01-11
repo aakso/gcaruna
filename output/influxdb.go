@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aakso/gcaruna"
+	"github.com/aakso/gcaruna/client"
 	influxdb "github.com/influxdb/influxdb/client/v2"
 )
 

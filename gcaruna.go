@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aakso/gcaruna"
+	"github.com/aakso/gcaruna/client"
 	"github.com/aakso/gcaruna/output"
 )
 
@@ -110,7 +110,7 @@ func (cfg *Config) Parse(args []string) error {
 	// Parse timestamps
 	start := *cfg.argmap["tstart"].(*string)
 	if start != "" {
-		cfg.TimeStart, err = time.Parse(time.RFC3339, *cfg.argmap["start"].(*string))
+		cfg.TimeStart, err = time.Parse(time.RFC3339, *cfg.argmap["tstart"].(*string))
 		if err != nil {
 			return fmt.Errorf("Cannot parse time_start: %s", err)
 		}
